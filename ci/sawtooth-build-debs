@@ -103,5 +103,4 @@ RUN wget https://download.01.org/intel-sgx/linux-1.8/sgx_linux_ubuntu16.04.1_x64
 WORKDIR /project/sawtooth-core
 
 # Build sawtooth debs
-ENV VERSION=AUTO_STRICT
 ENTRYPOINT ./bin/build_debs

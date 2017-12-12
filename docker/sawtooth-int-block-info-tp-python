@@ -14,14 +14,14 @@
 # ------------------------------------------------------------------------------
 
 # Description:
-#   Builds an image with the Hyperledger Sawtooth Validator installed from
+#   Builds an image with the Hyperledger Sawtooth TP block-info installed from
 #   local debs.
 #
 # Build:
 #   This image should be built using `build_all installed`.
 #
 # Run:
-#   $ docker run sawtooth-validator
+#   $ docker run sawtooth-block-info-tp-python
 
 FROM ubuntu:xenial
 
@@ -44,11 +44,8 @@ RUN cd /debs \
  && apt-get update
 
 RUN apt-get install -y -q --allow-unauthenticated \
-    python3-sawtooth-validator \
-    python3-sawtooth-block-info \
-    python3-sawtooth-poet-cli \
-    python3-sawtooth-cli
+    python3-sawtooth-block-info
 
 EXPOSE 4004/tcp
 
-CMD ["bash", "-c", "\"sawtooth admin keygen && sawtooth-validator\""]
+CMD ["block-info-tp-python", "-C", "tcp://validator:4004"]

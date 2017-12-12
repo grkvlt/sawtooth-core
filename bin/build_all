@@ -359,6 +359,9 @@ then
         cp $top_dir/docker/sawtooth-int-* $build_dir/
         ls $build_dir
 
+        docker_build $build_dir/sawtooth-int-block-info-tp-python \
+            $build_dir/ sawtooth-block-info-tp-python
+
         docker_build $build_dir/sawtooth-int-rest-api \
             $build_dir/ sawtooth-rest-api
 
