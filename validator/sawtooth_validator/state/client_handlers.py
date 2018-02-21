@@ -185,7 +185,7 @@ class _ClientRequestHandler(Handler, metaclass=abc.ABCMeta):
             try:
                 return self._block_store[request.head_id]
             except KeyError as e:
-                LOGGER.debug('Unable to find block "%s" in store', e)
+                LOGGER.debug('Unable to find block "%s" in store: %s', request.head_id, e)
                 raise _ResponseFailed(self._status.NO_ROOT)
 
         else:
@@ -891,8 +891,10 @@ class BlockGetByTransactionRequest(_ClientRequestHandler):
         self._validate_ids([request.transaction_id])
 
         try:
+            LOGGER.debug('XXX >>> BlockGetByTransactionRequest(%s)', request.transaction_id)
             block = self._block_store.get_block_by_transaction_id(
                 request.transaction_id).block
+            LOGGER.debug('XXX <<< BlockGetByTransactionRequest(%s)', request.transaction_id)
         except ValueError as e:
             LOGGER.debug(e)
             return self._status.NO_RESOURCE

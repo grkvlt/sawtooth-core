@@ -21,6 +21,9 @@ from sawtooth_validator.journal.block_wrapper import BlockWrapper
 from sawtooth_validator.protobuf.block_pb2 import Block
 from sawtooth_validator.state.merkle import INIT_ROOT_KEY
 
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 class BlockStore(MutableMapping):
     """
@@ -268,7 +271,9 @@ class BlockStore(MutableMapping):
         Raises:
             ValueError if no block containing the transaction is found
         """
+        LOGGER.debug('XXX <<< get_block_by_transaction_id(%s)', txn_id)
         block = self._block_store.get(txn_id, index='transaction')
+        LOGGER.debug('XXX >>> get_block_by_transaction_id(%s)', txn_id)
         if not block:
             raise ValueError(
                 'Transaction "{}" not in BlockStore'.format(txn_id))
