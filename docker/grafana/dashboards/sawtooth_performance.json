@@ -1,4 +1,4 @@
-{
+{ "dashboard": {
   "__inputs": [
     {
       "name": "metrics",
@@ -2572,4 +2572,8 @@
   "timezone": "",
   "title": "Sawtooth Performance",
   "version": 6
+},
+"folderId": 0,
+"overwrite": false
 }
+
