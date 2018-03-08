@@ -107,6 +107,11 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	}
 	defer validator.Close()
 
+	listener, err := messaging.NewConnection(context, zmq.ROUTER, "tcp://0.0.0.0:4004")
+	if err != nil {
+		return restart, fmt.Errorf("Could not bind listener connection: %v", err)
+	}
+
 	monitor, err := validator.Monitor(zmq.EVENT_DISCONNECTED)
 	if err != nil {
 		return restart, fmt.Errorf("Could not monitor validator connection: %v", err)
@@ -137,6 +142,7 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	// Setup ZMQ poller for routing messages between worker threads and validator
 	poller := zmq.NewPoller()
 	poller.Add(validator.Socket(), zmq.POLLIN)
+	poller.Add(listener.Socket(), zmq.POLLIN)
 	poller.Add(monitor, zmq.POLLIN)
 	poller.Add(workers.Socket(), zmq.POLLIN)
 
