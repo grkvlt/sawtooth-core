@@ -118,6 +118,7 @@ func NewConnection(context *zmq.Context, t zmq.Type, uri string) (*ZmqConnection
 // If id is not "", the id is included as the first part of the message. This
 // is useful for passing messages to a ROUTER socket so it can route them.
 func (self *ZmqConnection) SendData(id string, data []byte) error {
+	logger.Debugf("SendData() uri %v / identity %v / %v", self.uri, self.identity, id)
 	if id != "" {
 		_, err := self.socket.SendMessage(id, [][]byte{data})
 		if err != nil {

@@ -134,6 +134,7 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	for i := uint(0); i < self.nThreads; i++ {
 		go worker(context, "inproc://workers", queue, self.handlers)
 	}
+
 	// Setup shutdown thread
 	go shutdown(context, "inproc://workers", queue, self.shutdown)
 
@@ -178,7 +179,7 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 				restart = receiveMonitor(monitor, self.shutdown)
 
 			case workers.Socket():
-				receiveWorkers(ids, validator, workers, &workersLeft)
+				receiveWorkers(ids, validator, listener, workers, &workersLeft)
 				if workersLeft == 0 {
 					return restart, nil
 				}
@@ -319,7 +320,7 @@ func receiveMonitor(monitor *zmq.Socket, shutdown chan bool) bool {
 }
 
 // Handle incoming messages from the workers
-func receiveWorkers(ids map[string]string, validator, workers messaging.Connection, workersLeft *uint) {
+func receiveWorkers(ids map[string]string, validator, listener, workers messaging.Connection, workersLeft *uint) {
 	// Receive a mesasge from the workers
 	workerId, data, err := workers.RecvData()
 	if err != nil {
@@ -346,10 +347,15 @@ func receiveWorkers(ids map[string]string, validator, workers messaging.Connecti
 		ids[corrId] = workerId
 	}
 
-	// Pass the message on to the validator
+	// Pass the message on to the validator and listener
 	err = validator.SendData("", data)
 	if err != nil {
 		logger.Errorf("Failed to send message (%v) to validator: %v", corrId, err)
+		return
+	}
+	err = listener.SendData("", data)
+	if err != nil {
+		logger.Errorf("Failed to send message (%v) to listener: %v", corrId, err)
 		return
 	}
 }
