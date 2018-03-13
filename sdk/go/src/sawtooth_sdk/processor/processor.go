@@ -118,13 +118,15 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	}
 
 	// Setup connection to internal worker thread pool
-	workers, err := messaging.NewConnection(context, zmq.ROUTER, true, "inproc://workers")
+	workersValidator, err := messaging.NewConnection(context, zmq.ROUTER, true, "inproc://workerValidator")
+	workersListener, err := messaging.NewConnection(context, zmq.ROUTER, true, "inproc://workerListener")
 	if err != nil {
 		return restart, fmt.Errorf("Could not create thread pool router: %v", err)
 	}
 
-	// Make work queue. Buffer so the router doesn't block
-	queue := make(chan *validator_pb2.Message, self.maxQueue)
+	// Make work queues . Buffer so the router doesn't block
+	queueValidator := make(chan *validator_pb2.Message, self.maxQueue)
+	queueListener := make(chan *validator_pb2.Message, self.maxQueue)
 
 	// Keep track of which correlation ids go to which worker threads, i.e. map
 	// corrId->workerThreadId
@@ -132,25 +134,28 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 
 	// Startup worker thread pool
 	for i := uint(0); i < self.nThreads; i++ {
-		go worker(context, "inproc://workers", queue, self.handlers)
+		go worker(context, "inproc://workerValidator", "inproc://workerValidator", queueValidator, self.handlers)
+		go worker(context, "inproc://workerValidator", "inproc://workerListener", queueListener, self.handlers)
 	}
 
 	// Setup shutdown thread
-	go shutdown(context, "inproc://workers", queue, self.shutdown)
+	go shutdown(context, "inproc://workerValidator", queueValidator, queueListener, self.shutdown)
 
-	workersLeft := self.nThreads + 1
+	workersLeftValidator := self.nThreads + 1
+	workersLeftListener := self.nThreads
 
 	// Setup ZMQ poller for routing messages between worker threads and validator
 	poller := zmq.NewPoller()
 	poller.Add(validator.Socket(), zmq.POLLIN)
 	poller.Add(listener.Socket(), zmq.POLLIN)
 	poller.Add(monitor, zmq.POLLIN)
-	poller.Add(workers.Socket(), zmq.POLLIN)
+	poller.Add(workersValidator.Socket(), zmq.POLLIN)
+	poller.Add(workersListener.Socket(), zmq.POLLIN)
 
 	// Register all handlers with the validator
 	for _, handler := range self.handlers {
 		for _, version := range handler.FamilyVersions() {
-			err := register(validator, handler, version, queue)
+			err := register(validator, handler, version, queueValidator)
 			if err != nil {
 				return restart, fmt.Errorf(
 					"Error registering handler (%v, %v, %v): %v",
@@ -170,17 +175,23 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 		for _, ready := range polled {
 			switch socket := ready.Socket; socket {
 			case validator.Socket():
-				receiveMessage(ids, validator, workers, queue)
+				receiveMessage(ids, validator, workersValidator, queueValidator)
 
 			case listener.Socket():
-				receiveMessage(ids, listener, workers, queue)
+				receiveMessage(ids, listener, workersListener, queueListener)
 
 			case monitor:
 				restart = receiveMonitor(monitor, self.shutdown)
 
-			case workers.Socket():
-				receiveWorkers(ids, validator, listener, workers, &workersLeft)
-				if workersLeft == 0 {
+			case workersValidator.Socket():
+				receiveWorkers(ids, validator, workersValidator, &workersLeftValidator)
+				if workersLeftValidator == 0 {
+					return restart, nil
+				}
+
+		  case workersListener.Socket():
+				receiveWorkers(ids, listener, workersListener, &workersLeftListener)
+				if workersLeftListener == 0 {
 					return restart, nil
 				}
 			}
@@ -240,6 +251,8 @@ func receiveMessage(ids map[string]string, source, workers messaging.Connection,
 	// worker thread.
 	t := msg.GetMessageType()
 	corrId := msg.GetCorrelationId()
+
+	logger.Debugf("MMM got incoming message on %v: %v (%v)", workers.Identity(), t, corrId)
 
 	// If this is a new request, put in on the work queue
 	switch t {
@@ -320,7 +333,7 @@ func receiveMonitor(monitor *zmq.Socket, shutdown chan bool) bool {
 }
 
 // Handle incoming messages from the workers
-func receiveWorkers(ids map[string]string, validator, listener, workers messaging.Connection, workersLeft *uint) {
+func receiveWorkers(ids map[string]string, source, workers messaging.Connection, workersLeft *uint) {
 	// Receive a mesasge from the workers
 	workerId, data, err := workers.RecvData()
 	if err != nil {
@@ -336,6 +349,7 @@ func receiveWorkers(ids map[string]string, validator, listener, workers messagin
 
 	t := msg.GetMessageType()
 	corrId := msg.GetCorrelationId()
+	logger.Debugf("WWW got incoming message on %v: %v (%v)", workers.Identity(), t, corrId)
 
 	if t == validator_pb2.Message_DEFAULT && corrId == "shutdown" {
 		*workersLeft = *workersLeft - 1
@@ -347,15 +361,10 @@ func receiveWorkers(ids map[string]string, validator, listener, workers messagin
 		ids[corrId] = workerId
 	}
 
-	// Pass the message on to the validator and listener
-	err = validator.SendData("", data)
+	// Pass the message back to the source
+	err = source.SendData("", data)
 	if err != nil {
-		logger.Errorf("Failed to send message (%v) to validator: %v", corrId, err)
-		return
-	}
-	err = listener.SendData("", data)
-	if err != nil {
-		logger.Errorf("Failed to send message (%v) to listener: %v", corrId, err)
+		logger.Errorf("Failed to send message (%v) to source: %v", corrId, err)
 		return
 	}
 }

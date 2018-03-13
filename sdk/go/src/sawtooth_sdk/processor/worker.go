@@ -28,15 +28,23 @@ import (
 )
 
 // The main worker thread finds an appropriate handler and processes the request
-func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message, handlers []TransactionHandler) {
+func worker(context *zmq.Context, validator string, uri string, queue chan *validator_pb2.Message, handlers []TransactionHandler) {
+	// Connect to the validator thread
+	validatorConnection, err := messaging.NewConnection(context, zmq.DEALER, false, validator)
+	if err != nil {
+		logger.Errorf("Failed to connect to validator thread: %v", err)
+		return
+	}
+	defer validatorConnection.Close()
+
 	// Connect to the main send/receive thread
-	connection, err := messaging.NewConnection(context, zmq.DEALER, false, uri)
+	responseConnection, err := messaging.NewConnection(context, zmq.DEALER, false, uri)
 	if err != nil {
 		logger.Errorf("Failed to connect to main thread: %v", err)
 		return
 	}
-	defer connection.Close()
-	id := connection.Identity()
+	defer responseConnection.Close()
+	id := responseConnection.Identity()
 
 	// Receive work off of the queue until the queue is closed
 	for msg := range queue {
@@ -50,6 +58,7 @@ func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message,
 		}
 
 		header := request.GetHeader()
+		logger.Debugf("WWW worker %v (%v) got: %v", uri, id, header)
 
 		// Try to find a handler
 		handler, err := findHandler(handlers, header)
@@ -60,7 +69,7 @@ func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message,
 
 		// Construct a new Context instance for the handler
 		contextId := request.GetContextId()
-		context := NewContext(connection, contextId)
+		context := NewContext(validatorConnection, contextId)
 
 		// Run the handler
 		err = handler.Apply(request, context)
@@ -99,8 +108,8 @@ func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message,
 			break
 		}
 
-		// Send back a response to the validator
-		err = connection.SendMsg(
+		// Send back a response
+		err = responseConnection.SendMsg(
 			validator_pb2.Message_TP_PROCESS_RESPONSE,
 			responseData, msg.GetCorrelationId(),
 		)
@@ -112,7 +121,7 @@ func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message,
 
 	// Queue has closed, so send shutdown signal
 	logger.Infof("(%v) No more work in queue, shutting down", id)
-	err = connection.SendMsg(
+	err = validatorConnection.SendMsg(
 		validator_pb2.Message_DEFAULT,
 		[]byte{byte(0)}, "shutdown",
 	)
@@ -151,7 +160,7 @@ func findHandler(handlers []TransactionHandler, header *transaction_pb2.Transact
 }
 
 // Waits for something to come along a channel and then initiates processor shutdown
-func shutdown(context *zmq.Context, uri string, queue chan *validator_pb2.Message, wait chan bool) {
+func shutdown(context *zmq.Context, uri string, queueValidator chan *validator_pb2.Message, queueListener chan *validator_pb2.Message, wait chan bool) {
 	// Wait for a request to shutdown
 	connection, err := messaging.NewConnection(context, zmq.DEALER, false, uri)
 	if err != nil {
@@ -199,7 +208,8 @@ func shutdown(context *zmq.Context, uri string, queue chan *validator_pb2.Messag
 	}
 
 	// Close the work queue, telling the worker threads there's no more work
-	close(queue)
+	close(queueValidator)
+	close(queueListener)
 
 	err = connection.SendMsg(
 		validator_pb2.Message_DEFAULT,
