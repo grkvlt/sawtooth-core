@@ -30,7 +30,7 @@ import (
 // The main worker thread finds an appropriate handler and processes the request
 func worker(context *zmq.Context, uri string, queue chan *validator_pb2.Message, handlers []TransactionHandler) {
 	// Connect to the main send/receive thread
-	connection, err := messaging.NewConnection(context, zmq.DEALER, uri)
+	connection, err := messaging.NewConnection(context, zmq.DEALER, false, uri)
 	if err != nil {
 		logger.Errorf("Failed to connect to main thread: %v", err)
 		return
@@ -153,7 +153,7 @@ func findHandler(handlers []TransactionHandler, header *transaction_pb2.Transact
 // Waits for something to come along a channel and then initiates processor shutdown
 func shutdown(context *zmq.Context, uri string, queue chan *validator_pb2.Message, wait chan bool) {
 	// Wait for a request to shutdown
-	connection, err := messaging.NewConnection(context, zmq.DEALER, uri)
+	connection, err := messaging.NewConnection(context, zmq.DEALER, false, uri)
 	if err != nil {
 		logger.Errorf("Failed to connect to main thread: %v", err)
 		return

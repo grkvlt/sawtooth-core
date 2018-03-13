@@ -84,7 +84,7 @@ type storedMsg struct {
 
 // NewConnection establishes a new connection using the given ZMQ context and
 // socket type to the given URI.
-func NewConnection(context *zmq.Context, t zmq.Type, uri string) (*ZmqConnection, error) {
+func NewConnection(context *zmq.Context, t zmq.Type, bind bool, uri string) (*ZmqConnection, error) {
 	socket, err := context.NewSocket(t)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create ZMQ socket: %v", err)
@@ -94,10 +94,9 @@ func NewConnection(context *zmq.Context, t zmq.Type, uri string) (*ZmqConnection
 	socket.SetIdentity(identity)
 
 	logger.Info("Connecting to ", uri)
-	switch t {
-	case zmq.ROUTER:
+	if bind {
 		err = socket.Bind(uri)
-	case zmq.DEALER:
+	} else {
 		err = socket.Connect(uri)
 	}
 	if err != nil {

@@ -101,13 +101,13 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	restart := false
 
 	// Establish a connection to the validator
-	validator, err := messaging.NewConnection(context, zmq.DEALER, self.uri)
+	validator, err := messaging.NewConnection(context, zmq.DEALER, false, self.uri)
 	if err != nil {
 		return restart, fmt.Errorf("Could not connect to validator: %v", err)
 	}
 	defer validator.Close()
 
-	listener, err := messaging.NewConnection(context, zmq.ROUTER, "tcp://*:4004")
+	listener, err := messaging.NewConnection(context, zmq.DEALER, true, "tcp://*:4004")
 	if err != nil {
 		return restart, fmt.Errorf("Could not bind listener connection: %v", err)
 	}
@@ -118,7 +118,7 @@ func (self *TransactionProcessor) start(context *zmq.Context) (bool, error) {
 	}
 
 	// Setup connection to internal worker thread pool
-	workers, err := messaging.NewConnection(context, zmq.ROUTER, "inproc://workers")
+	workers, err := messaging.NewConnection(context, zmq.ROUTER, true, "inproc://workers")
 	if err != nil {
 		return restart, fmt.Errorf("Could not create thread pool router: %v", err)
 	}
