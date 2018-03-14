@@ -252,7 +252,7 @@ func receiveMessage(ids map[string]string, source, workers messaging.Connection,
 	t := msg.GetMessageType()
 	corrId := msg.GetCorrelationId()
 
-	logger.Debugf("MMM got incoming message on %v: %v (%v)", workers.Identity(), t, corrId)
+	logger.Debugf("MMM got incoming message on %v: %v[ %v ]", workers.Identity(), t, msg)
 
 	// If this is a new request, put in on the work queue
 	switch t {

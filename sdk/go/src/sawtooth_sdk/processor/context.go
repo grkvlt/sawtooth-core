@@ -23,6 +23,7 @@ import (
 	"sawtooth_sdk/messaging"
 	"sawtooth_sdk/protobuf/events_pb2"
 	"sawtooth_sdk/protobuf/state_context_pb2"
+	"sawtooth_sdk/protobuf/client_state_pb2"
 	"sawtooth_sdk/protobuf/validator_pb2"
 )
 
@@ -119,6 +120,59 @@ func (self *Context) GetState(addresses []string) (map[string][]byte, error) {
 	return results, nil
 }
 
+// GetClientState queries the validator state for data at an address.
+// A []]byte array is returned.
+//
+// Used when not processing a transaction for commit.
+func (self *Context) GetClientState(address string) ([]byte, error) {
+	logger.Debugf("GetClientState() connnection %v / %v", self.connection, self.contextId)
+	// Construct the message
+	request := &client_state_pb2.ClientStateGetRequest{
+		Address: address,
+	}
+	bytes, err := proto.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to marshal ClientStateGetRequest: %v", err)
+	}
+
+	// Send the message and get the response
+	corrId, err := self.connection.SendNewMsg(
+		validator_pb2.Message_CLIENT_STATE_GET_REQUEST, bytes,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to send ClientStateGetRequest: %v", err)
+	}
+
+	_, msg, err := self.connection.RecvMsgWithId(corrId)
+	if msg.GetCorrelationId() != corrId {
+		return nil, fmt.Errorf(
+			"Expected message with correlation id %v but got %v",
+			corrId, msg.GetCorrelationId(),
+		)
+	}
+
+	if msg.GetMessageType() != validator_pb2.Message_CLIENT_STATE_GET_RESPONSE {
+		return nil, fmt.Errorf(
+			"Expected ClientStateGetResponse but got %v", msg.GetMessageType(),
+		)
+	}
+
+	// Parse the result
+	response := &client_state_pb2.ClientStateGetResponse{}
+	err = proto.Unmarshal(msg.GetContent(), response)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to unmarshal ClientStateGetResponse: %v", err)
+	}
+
+	switch response.Status {
+	case client_state_pb2.ClientStateGetResponse_OK:
+		return response.GetValue(), nil
+  default:
+		return nil, fmt.Errorf("Failed to get client state: %v", response.GetStatus())
+	}
+}
+
+
 // SetState requests that each address in the validator state be set to the given
 // value. A slice of addresses set is returned or an error if there was a
 // problem setting the addresses. For example:
@@ -133,6 +187,7 @@ func (self *Context) GetState(addresses []string) (map[string][]byte, error) {
 //     }
 //
 func (self *Context) SetState(pairs map[string][]byte) ([]string, error) {
+	logger.Debugf("SetState() connnection %v / %v", self.connection, self.contextId)
 	// Construct the message
 	entries := make([]*state_context_pb2.TpStateEntry, 0, len(pairs))
 	for address, data := range pairs {
@@ -207,6 +262,7 @@ func (self *Context) SetState(pairs map[string][]byte) ([]string, error) {
 //     }
 //
 func (self *Context) DeleteState(addresses []string) ([]string, error) {
+	logger.Debugf("DeleteState() connnection %v / %v", self.connection, self.contextId)
 	// Construct the message
 	request := &state_context_pb2.TpStateDeleteRequest{
 		ContextId: self.contextId,
@@ -258,6 +314,7 @@ func (self *Context) DeleteState(addresses []string) ([]string, error) {
 
 // Add a blob to the execution result for this transaction.
 func (self *Context) AddReceiptData(data []byte) error {
+	logger.Debugf("AddReceiptData() connnection %v / %v", self.connection, self.contextId)
 	// Append the data to the transaction receipt and set the type
 	request := &state_context_pb2.TpReceiptAddDataRequest{
 		ContextId: self.contextId,
@@ -308,6 +365,7 @@ func (self *Context) AddReceiptData(data []byte) error {
 
 // Add a new event to the execution result for this transaction.
 func (self *Context) AddEvent(event_type string, attributes []Attribute, event_data []byte) error {
+	logger.Debugf("AddEvent() connnection %v / %v", self.connection, self.contextId)
 	event_attributes := make([]*events_pb2.Event_Attribute, 0, len(attributes))
 	for _, attribute := range attributes {
 		event_attributes = append(event_attributes, &events_pb2.Event_Attribute{attribute.Key, attribute.Value})
