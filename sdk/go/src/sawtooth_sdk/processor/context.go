@@ -65,7 +65,8 @@ func (self *Context) GetState(addresses []string) (map[string][]byte, error) {
 	logger.Debugf("GetState() connnection %v / %v", self.connection, self.contextId)
 	// Construct the message
 	request := &state_context_pb2.TpStateGetRequest{
-		ContextId: self.contextId,
+		// ContextId: self.contextId,
+		ContextId: "whatever",
 		Addresses: addresses,
 	}
 	bytes, err := proto.Marshal(request)
