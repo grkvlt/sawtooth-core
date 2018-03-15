@@ -34,6 +34,7 @@ import (
 type Context struct {
 	connection messaging.Connection
 	contextId  string
+	data       []byte
 }
 
 type Attribute struct {
@@ -46,6 +47,7 @@ func NewContext(connection messaging.Connection, contextId string) *Context {
 	return &Context{
 		connection: connection,
 		contextId:  contextId,
+		data:       nil,
 	}
 }
 
@@ -167,7 +169,7 @@ func (self *Context) GetClientState(address string) ([]byte, error) {
 	switch response.Status {
 	case client_state_pb2.ClientStateGetResponse_OK:
 		return response.GetValue(), nil
-  default:
+    default:
 		return nil, fmt.Errorf("Failed to get client state: %v", response.GetStatus())
 	}
 }
@@ -320,6 +322,7 @@ func (self *Context) AddReceiptData(data []byte) error {
 		ContextId: self.contextId,
 		Data:      data,
 	}
+	self.data = data
 	bytes, err := proto.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("Failed to marshal: %v", err)
@@ -361,6 +364,10 @@ func (self *Context) AddReceiptData(data []byte) error {
 	}
 
 	return nil
+}
+
+func (self *Context) GetReceiptData() []byte {
+    return self.data
 }
 
 // Add a new event to the execution result for this transaction.

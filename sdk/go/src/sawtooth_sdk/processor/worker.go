@@ -100,6 +100,7 @@ func worker(context *zmq.Context, validator string, uri string, queue chan *vali
 			}
 		} else {
 			response.Status = processor_pb2.TpProcessResponse_OK
+			response.ExtendedData = context.GetReceiptData()
 		}
 
 		responseData, err := proto.Marshal(response)
